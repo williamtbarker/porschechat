@@ -1,53 +1,41 @@
-from fastapi import FastAPI, HTTPException, Body
-from fastapi.middleware.cors import CORSMiddleware
-import openai
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
 from dotenv import load_dotenv
 import os
-import logging
+from openai import OpenAI
 
-# Load environment variables and set up logging
+# Load environment variables
 load_dotenv()
-openai.api_key = os.getenv("OPENAI_API_KEY")
-logging.basicConfig(level=logging.INFO)
+api_key = os.getenv("OPENAI_API_KEY")
 
-if not openai.api_key:
-    raise ValueError("No OpenAI API key found in .env")
+# Initialize the OpenAI client
+client = OpenAI(api_key=api_key)
 
+# Initialize FastAPI app
 app = FastAPI()
 
-# Set up CORS
-origins = [
-    "http://localhost:3000",  # Assuming your frontend runs on localhost:3000
-    "https://yourfrontenddomain.com",  # Replace with your actual frontend domain
-]
+# Define request model
+class ChatRequest(BaseModel):
+    prompt: str
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Endpoint to handle chatbot functionality
+# Define endpoint
 @app.post("/chat")
-async def chat_with_openai(prompt: str = Body(..., embed=True)):
+async def chat_with_openai(request: ChatRequest):
     try:
-        response = openai.Completion.create(
-            engine="davinci",
-            prompt=prompt,
-            max_tokens=150,
-            n=1,
-            stop=None,
-            temperature=0.7
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": request.prompt}
+            ]
         )
-        return {"response": response.choices[0].text.strip()}
+        return {"response": response.choices[0].message.content}
     except Exception as e:
-        logging.error(f"Error in OpenAI API call: {e}")
-        raise HTTPException(status_code=500, detail="Error in processing the request")
+        raise HTTPException(status_code=500, detail=str(e))
 
-# Optional: Health check endpoint
+# Optional: Add health check endpoint
 @app.get("/health")
 async def health_check():
     return {"status": "running"}
+
 
